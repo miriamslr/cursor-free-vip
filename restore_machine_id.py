@@ -38,18 +38,10 @@ class ConfigError(Exception):
     pass
 
 class MachineIDRestorer:
-    def __init__(self, translator=None):
+    def __init__(self, config, config_dir, translator=None):
         self.translator = translator
-        
-        # 读取配置
-        config_dir = os.path.join(get_user_documents_path(), ".cursor-free-vip")
-        config_file = os.path.join(config_dir, "config.ini")
-        config = configparser.ConfigParser()
-        
-        if not os.path.exists(config_file):
-            raise FileNotFoundError(f"Config file not found: {config_file}")
-        
-        config.read(config_file, encoding='utf-8')
+        self.config = config
+        self.config_dir = config_dir
         
         # 根据操作系统获取路径
         if sys.platform == "win32":  # Windows
@@ -60,22 +52,22 @@ class MachineIDRestorer:
             if not config.has_section('WindowsPaths'):
                 raise ConfigError("WindowsPaths section not found in config")
                 
-            self.db_path = config.get('WindowsPaths', 'storage_path')
-            self.sqlite_path = config.get('WindowsPaths', 'sqlite_path')
+            self.db_path = self.config.get('WindowsPaths', 'storage_path')
+            self.sqlite_path = self.config.get('WindowsPaths', 'sqlite_path')
             
         elif sys.platform == "darwin":  # macOS
             if not config.has_section('MacPaths'):
                 raise ConfigError("MacPaths section not found in config")
                 
-            self.db_path = config.get('MacPaths', 'storage_path')
-            self.sqlite_path = config.get('MacPaths', 'sqlite_path')
+            self.db_path = self.config.get('MacPaths', 'storage_path')
+            self.sqlite_path = self.config.get('MacPaths', 'sqlite_path')
             
         elif sys.platform == "linux":  # Linux
             if not config.has_section('LinuxPaths'):
                 raise ConfigError("LinuxPaths section not found in config")
                 
-            self.db_path = config.get('LinuxPaths', 'storage_path')
-            self.sqlite_path = config.get('LinuxPaths', 'sqlite_path')
+            self.db_path = self.config.get('LinuxPaths', 'storage_path')
+            self.sqlite_path = self.config.get('LinuxPaths', 'sqlite_path')
             
         else:
             raise NotImplementedError(f"Not Supported OS: {sys.platform}")
@@ -111,7 +103,7 @@ class MachineIDRestorer:
                 timestamp = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
                 date_str = timestamp.strftime("%Y-%m-%d %H:%M:%S")
             except ValueError:
-                date_str = "未知日期"
+                date_str = ""
             
             # 获取文件大小
             size = os.path.getsize(backup)
@@ -387,7 +379,7 @@ class MachineIDRestorer:
 
 def run(translator=None):
     """恢复机器ID的主函数"""
-    config = get_config(translator)
+    config, config_dir = get_config(translator)
     if not config:
         return False
     
@@ -395,7 +387,7 @@ def run(translator=None):
     print(f"{Fore.CYAN}{EMOJI['RESET']} {translator.get('restore.title')}{Style.RESET_ALL}")
     print(f"{Fore.CYAN}{'='*50}{Style.RESET_ALL}")
     
-    restorer = MachineIDRestorer(translator)
+    restorer = MachineIDRestorer(config, config_dir, translator)
     restorer.restore_machine_ids()
     
     print(f"\n{Fore.CYAN}{'='*50}{Style.RESET_ALL}")

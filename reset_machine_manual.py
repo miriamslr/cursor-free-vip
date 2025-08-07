@@ -514,18 +514,11 @@ def patch_cursor_get_machine_id(translator) -> bool:
         return False
 
 class MachineIDResetter:
-    def __init__(self, translator=None):
+    def __init__(self, config, config_dir, translator=None):
         self.translator = translator
-
-        # Read configuration
-        config_dir = os.path.join(get_user_documents_path(), ".cursor-free-vip")
-        config_file = os.path.join(config_dir, "config.ini")
-        config = configparser.ConfigParser()
-        
-        if not os.path.exists(config_file):
-            raise FileNotFoundError(f"Config file not found: {config_file}")
-        
-        config.read(config_file, encoding='utf-8')
+        self.config = config
+        self.config_dir = config_dir
+        self.config_file = os.path.join(config_dir, "config.ini")  # Definição da variável config_file
 
         # Check operating system
         if sys.platform == "win32":  # Windows
@@ -581,7 +574,7 @@ class MachineIDResetter:
             raise NotImplementedError(f"Not Supported OS: {sys.platform}")
 
         # Save any changes to config file
-        with open(config_file, 'w', encoding='utf-8') as f:
+        with open(self.config_file, 'w', encoding='utf-8') as f:
             config.write(f)
 
     def generate_new_ids(self):
@@ -648,75 +641,128 @@ class MachineIDResetter:
         try:
             print(f"{Fore.CYAN}{EMOJI['INFO']} {self.translator.get('reset.updating_system_ids')}...{Style.RESET_ALL}")
             
+            success = True
+            
             if sys.platform.startswith("win"):
-                self._update_windows_machine_guid()
-                self._update_windows_machine_id()
-            elif sys.platform == "darwin":
-                self._update_macos_platform_uuid(new_ids)
+                # Atualiza o MachineGuid (mais crítico)
+                if not self._update_windows_machine_guid():
+                    print(f"{Fore.YELLOW}{EMOJI['WARNING']} {self.translator.get('reset.windows_guid_update_skipped')}{Style.RESET_ALL}")
+                    success = False
                 
-            print(f"{Fore.GREEN}{EMOJI['SUCCESS']} {self.translator.get('reset.system_ids_updated')}{Style.RESET_ALL}")
-            return True
+                # Atualiza o MachineId no SQMClient (menos crítico)
+                if not self._update_windows_machine_id():
+                    print(f"{Fore.YELLOW}{EMOJI['WARNING']} {self.translator.get('reset.windows_machine_id_update_skipped')}{Style.RESET_ALL}")
+                    # Não marcamos como falha total, pois o Cursor ainda pode funcionar sem isso
+                    
+            elif sys.platform == "darwin":
+                if not self._update_macos_platform_uuid(new_ids):
+                    print(f"{Fore.YELLOW}{EMOJI['WARNING']} {self.translator.get('reset.macos_uuid_update_skipped')}{Style.RESET_ALL}")
+                    success = False
+            
+            if success:
+                print(f"{Fore.GREEN}{EMOJI['SUCCESS']} {self.translator.get('reset.system_ids_updated')}{Style.RESET_ALL}")
+            else:
+                print(f"{Fore.YELLOW}{EMOJI['WARNING']} {self.translator.get('reset.system_ids_partially_updated')}{Style.RESET_ALL}")
+                print(f"{Fore.CYAN}{EMOJI['INFO']} {self.translator.get('reset.continue_without_admin')}{Style.RESET_ALL}")
+                
+            return True  # Retorna True mesmo com falhas parciais para continuar o processo
+            
         except Exception as e:
             print(f"{Fore.RED}{EMOJI['ERROR']} {self.translator.get('reset.system_ids_update_failed', error=str(e))}{Style.RESET_ALL}")
-            return False
+            print(f"{Fore.YELLOW}{EMOJI['WARNING']} {self.translator.get('reset.continue_without_admin')}{Style.RESET_ALL}")
+            return True  # Continua mesmo com falha para não interromper o fluxo principal
 
     def _update_windows_machine_guid(self):
         """Update Windows MachineGuid"""
         try:
             import winreg
-            key = winreg.OpenKey(
-                winreg.HKEY_LOCAL_MACHINE,
-                "SOFTWARE\\Microsoft\\Cryptography",
-                0,
-                winreg.KEY_WRITE | winreg.KEY_WOW64_64KEY
-            )
+            print(f"{Fore.CYAN}{EMOJI['INFO']} {self.translator.get('reset.updating_windows_machine_guid')}...{Style.RESET_ALL}")
+            
+            # Tenta abrir a chave com permissões de escrita
+            try:
+                key = winreg.OpenKey(
+                    winreg.HKEY_LOCAL_MACHINE,
+                    "SOFTWARE\\Microsoft\\Cryptography",
+                    0,
+                    winreg.KEY_WRITE | winreg.KEY_WOW64_64KEY
+                )
+            except PermissionError as e:
+                print(f"{Fore.RED}{EMOJI['ERROR']} {self.translator.get('reset.permission_denied', error=str(e))}{Style.RESET_ALL}")
+                print(f"{Fore.YELLOW}{EMOJI['WARNING']} {self.translator.get('reset.run_as_admin')}{Style.RESET_ALL}")
+                print(f"{Fore.CYAN}{EMOJI['INFO']} {self.translator.get('reset.alternative_solution')}{Style.RESET_ALL}")
+                return False
+                
+            # Se chegou aqui, tem permissão para escrever
             new_guid = str(uuid.uuid4())
-            winreg.SetValueEx(key, "MachineGuid", 0, winreg.REG_SZ, new_guid)
-            winreg.CloseKey(key)
-            print(f"{Fore.GREEN}{EMOJI['SUCCESS']} {self.translator.get('reset.windows_machine_guid_updated')}{Style.RESET_ALL}")
-        except PermissionError as e:
-            print(f"{Fore.RED}{EMOJI['ERROR']} {self.translator.get('reset.permission_denied', error=str(e))}{Style.RESET_ALL}")
-            raise
+            try:
+                winreg.SetValueEx(key, "MachineGuid", 0, winreg.REG_SZ, new_guid)
+                winreg.CloseKey(key)
+                print(f"{Fore.GREEN}{EMOJI['SUCCESS']} {self.translator.get('reset.windows_machine_guid_updated')}{Style.RESET_ALL}")
+                return True
+            except Exception as e:
+                print(f"{Fore.RED}{EMOJI['ERROR']} {self.translator.get('reset.update_windows_machine_guid_failed', error=str(e))}{Style.RESET_ALL}")
+                return False
+                
         except Exception as e:
-            print(f"{Fore.RED}{EMOJI['ERROR']} {self.translator.get('reset.update_windows_machine_guid_failed', error=str(e))}{Style.RESET_ALL}")
-            raise
+            print(f"{Fore.RED}{EMOJI['ERROR']} {self.translator.get('reset.unexpected_error', error=str(e))}{Style.RESET_ALL}")
+            return False
     
     def _update_windows_machine_id(self):
         """Update Windows MachineId in SQMClient registry"""
+        if not sys.platform.startswith("win"):
+            return True  # Não é Windows, não precisa fazer nada
+            
         try:
             import winreg
             # 1. Generate new GUID
             new_guid = "{" + str(uuid.uuid4()).upper() + "}"
             print(f"{Fore.CYAN}{EMOJI['INFO']} {self.translator.get('reset.new_machine_id')}: {new_guid}{Style.RESET_ALL}")
             
-            # 2. Open the registry key
+            print(f"{Fore.CYAN}{EMOJI['INFO']} {self.translator.get('reset.updating_windows_machine_id')}...{Style.RESET_ALL}")
+            
+            # 2. Tenta abrir ou criar a chave do registro
             try:
-                key = winreg.OpenKey(
-                    winreg.HKEY_LOCAL_MACHINE,
-                    r"SOFTWARE\Microsoft\SQMClient",
-                    0,
-                    winreg.KEY_WRITE | winreg.KEY_WOW64_64KEY
-                )
-            except FileNotFoundError:
-                # If the key does not exist, create it
-                key = winreg.CreateKey(
-                    winreg.HKEY_LOCAL_MACHINE,
-                    r"SOFTWARE\Microsoft\SQMClient"
-                )
-            
-            # 3. Set MachineId value
-            winreg.SetValueEx(key, "MachineId", 0, winreg.REG_SZ, new_guid)
-            winreg.CloseKey(key)
-            
-            print(f"{Fore.GREEN}{EMOJI['SUCCESS']} {self.translator.get('reset.windows_machine_id_updated')}{Style.RESET_ALL}")
-            return True
-            
-        except PermissionError:
-            print(f"{Fore.RED}{EMOJI['ERROR']} {self.translator.get('reset.permission_denied')}{Style.RESET_ALL}")
-            print(f"{Fore.YELLOW}{EMOJI['WARNING']} {self.translator.get('reset.run_as_admin')}{Style.RESET_ALL}")
-            return False
+                try:
+                    # Tenta abrir a chave existente com permissão de escrita
+                    key = winreg.OpenKey(
+                        winreg.HKEY_LOCAL_MACHINE,
+                        r"SOFTWARE\Microsoft\SQMClient",
+                        0,
+                        winreg.KEY_WRITE | winreg.KEY_WOW64_64KEY
+                    )
+                except FileNotFoundError:
+                    # Se a chave não existir, tenta criá-la
+                    try:
+                        key = winreg.CreateKeyEx(
+                            winreg.HKEY_LOCAL_MACHINE,
+                            r"SOFTWARE\Microsoft\SQMClient",
+                            0,
+                            winreg.KEY_WRITE | winreg.KEY_WOW64_64KEY
+                        )
+                    except PermissionError as e:
+                        print(f"{Fore.RED}{EMOJI['ERROR']} {self.translator.get('reset.permission_denied', error=str(e))}{Style.RESET_ALL}")
+                        print(f"{Fore.YELLOW}{EMOJI['WARNING']} {self.translator.get('reset.run_as_admin')}{Style.RESET_ALL}")
+                        print(f"{Fore.CYAN}{EMOJI['INFO']} {self.translator.get('reset.alternative_solution')}{Style.RESET_ALL}")
+                        return False
+                
+                # 3. Tenta definir o valor do MachineId
+                try:
+                    winreg.SetValueEx(key, "MachineId", 0, winreg.REG_SZ, new_guid)
+                    winreg.CloseKey(key)
+                    print(f"{Fore.GREEN}{EMOJI['SUCCESS']} {self.translator.get('reset.windows_machine_id_updated')}{Style.RESET_ALL}")
+                    return True
+                except Exception as e:
+                    print(f"{Fore.RED}{EMOJI['ERROR']} {self.translator.get('reset.update_windows_machine_id_failed', error=str(e))}{Style.RESET_ALL}")
+                    return False
+                    
+            except PermissionError as e:
+                print(f"{Fore.RED}{EMOJI['ERROR']} {self.translator.get('reset.permission_denied', error=str(e))}{Style.RESET_ALL}")
+                print(f"{Fore.YELLOW}{EMOJI['WARNING']} {self.translator.get('reset.run_as_admin')}{Style.RESET_ALL}")
+                print(f"{Fore.CYAN}{EMOJI['INFO']} {self.translator.get('reset.alternative_solution')}{Style.RESET_ALL}")
+                return False
+                
         except Exception as e:
-            print(f"{Fore.RED}{EMOJI['ERROR']} {self.translator.get('reset.update_windows_machine_id_failed', error=str(e))}{Style.RESET_ALL}")
+            print(f"{Fore.RED}{EMOJI['ERROR']} {self.translator.get('reset.unexpected_error', error=str(e))}{Style.RESET_ALL}")
             return False
                     
 
@@ -843,14 +889,14 @@ class MachineIDResetter:
             return False
 
 def run(translator=None):
-    config = get_config(translator)
+    config, config_dir = get_config(translator)
     if not config:
         return False
     print(f"\n{Fore.CYAN}{'='*50}{Style.RESET_ALL}")
     print(f"{Fore.CYAN}{EMOJI['RESET']} {translator.get('reset.title')}{Style.RESET_ALL}")
     print(f"{Fore.CYAN}{'='*50}{Style.RESET_ALL}")
 
-    resetter = MachineIDResetter(translator)  # Correctly pass translator
+    resetter = MachineIDResetter(config, config_dir, translator)
     resetter.reset_machine_ids()
 
     print(f"\n{Fore.CYAN}{'='*50}{Style.RESET_ALL}")

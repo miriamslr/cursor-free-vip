@@ -30,7 +30,7 @@ EMOJI = {
 class OAuthHandler:
     def __init__(self, translator=None, auth_type=None):
         self.translator = translator
-        self.config = get_config(translator)
+        self.config, _ = get_config(translator)
         self.auth_type = auth_type
         os.environ['BROWSER_HEADLESS'] = 'False'
         self.browser = None
@@ -68,7 +68,7 @@ class OAuthHandler:
         """Allow user to select a browser profile to use"""
         try:
             # 从配置中获取浏览器类型
-            config = get_config(self.translator)
+            config, _ = get_config(self.translator)
             browser_type = config.get('Browser', 'default_browser', fallback='chrome')
             browser_type_display = browser_type.capitalize()
             
@@ -169,7 +169,7 @@ class OAuthHandler:
             print(f"{Fore.CYAN}{EMOJI['INFO']} {self.translator.get('oauth.detected_platform', platform=platform_name) if self.translator else f'Detected platform: {platform_name}'}{Style.RESET_ALL}")
             
             # 从配置中获取浏览器类型
-            config = get_config(self.translator)
+            config, _ = get_config(self.translator)
             browser_type = config.get('Browser', 'default_browser', fallback='chrome')
             
             # Get browser paths and user data directory
@@ -237,7 +237,7 @@ class OAuthHandler:
         """Kill existing browser processes based on platform and browser type"""
         try:
             # 从配置中获取浏览器类型
-            config = get_config(self.translator)
+            config, _ = get_config(self.translator)
             browser_type = config.get('Browser', 'default_browser', fallback='chrome')
             browser_type = browser_type.lower()
             
@@ -300,7 +300,7 @@ class OAuthHandler:
         """Get the default user data directory based on browser type and platform"""
         try:
             # 从配置中获取浏览器类型
-            config = get_config(self.translator)
+            config, _ = get_config(self.translator)
             browser_type = config.get('Browser', 'default_browser', fallback='chrome')
             browser_type = browser_type.lower()
             
@@ -357,7 +357,7 @@ class OAuthHandler:
         """Get appropriate browser path based on platform and selected browser type"""
         try:
             # 从配置中获取浏览器类型
-            config = get_config(self.translator)
+            config, _ = get_config(self.translator)
             browser_type = config.get('Browser', 'default_browser', fallback='chrome')
             browser_type = browser_type.lower()
             
@@ -550,7 +550,7 @@ class OAuthHandler:
                     print(f"{Fore.CYAN}{EMOJI['INFO']} {self.translator.get('oauth.please_select_your_google_account_to_continue') if self.translator else 'Please select your Google account to continue...'}{Style.RESET_ALL}")
                     
                     # 获取配置中是否启用 alert 选项
-                    config = get_config(self.translator)
+                    config, _ = get_config(self.translator)
                     show_alert = config.getboolean('OAuth', 'show_selection_alert', fallback=False)
                     
                     if show_alert:

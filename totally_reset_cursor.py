@@ -505,18 +505,10 @@ def patch_cursor_get_machine_id(translator) -> bool:
         return False
 
 class MachineIDResetter:
-    def __init__(self, translator=None):
+    def __init__(self, config, config_dir, translator=None):
         self.translator = translator
-
-        # Read configuration
-        config_dir = os.path.join(get_user_documents_path(), ".cursor-free-vip")
-        config_file = os.path.join(config_dir, "config.ini")
-        config = configparser.ConfigParser()
-        
-        if not os.path.exists(config_file):
-            raise FileNotFoundError(f"Config file not found: {config_file}")
-        
-        config.read(config_file, encoding='utf-8')
+        self.config = config
+        self.config_dir = config_dir
 
         # Check operating system
         if sys.platform == "win32":  # Windows
@@ -524,56 +516,28 @@ class MachineIDResetter:
             if appdata is None:
                 raise EnvironmentError("APPDATA Environment Variable Not Set")
             
-            if not config.has_section('WindowsPaths'):
-                config.add_section('WindowsPaths')
-                config.set('WindowsPaths', 'storage_path', os.path.join(
-                    appdata, "Cursor", "User", "globalStorage", "storage.json"
-                ))
-                config.set('WindowsPaths', 'sqlite_path', os.path.join(
-                    appdata, "Cursor", "User", "globalStorage", "state.vscdb"
-                ))
+            if not self.config.has_section('WindowsPaths'):
+                raise ConfigError("WindowsPaths section not found in config")
                 
-            self.db_path = config.get('WindowsPaths', 'storage_path')
-            self.sqlite_path = config.get('WindowsPaths', 'sqlite_path')
+            self.db_path = self.config.get('WindowsPaths', 'storage_path')
+            self.sqlite_path = self.config.get('WindowsPaths', 'sqlite_path')
             
         elif sys.platform == "darwin":  # macOS
-            if not config.has_section('MacPaths'):
-                config.add_section('MacPaths')
-                config.set('MacPaths', 'storage_path', os.path.abspath(os.path.expanduser(
-                    "~/Library/Application Support/Cursor/User/globalStorage/storage.json"
-                )))
-                config.set('MacPaths', 'sqlite_path', os.path.abspath(os.path.expanduser(
-                    "~/Library/Application Support/Cursor/User/globalStorage/state.vscdb"
-                )))
+            if not self.config.has_section('MacPaths'):
+                raise ConfigError("MacPaths section not found in config")
                 
-            self.db_path = config.get('MacPaths', 'storage_path')
-            self.sqlite_path = config.get('MacPaths', 'sqlite_path')
+            self.db_path = self.config.get('MacPaths', 'storage_path')
+            self.sqlite_path = self.config.get('MacPaths', 'sqlite_path')
             
         elif sys.platform == "linux":  # Linux
-            if not config.has_section('LinuxPaths'):
-                config.add_section('LinuxPaths')
-                # Get actual user's home directory
-                sudo_user = os.environ.get('SUDO_USER')
-                actual_home = f"/home/{sudo_user}" if sudo_user else os.path.expanduser("~")
+            if not self.config.has_section('LinuxPaths'):
+                raise ConfigError("LinuxPaths section not found in config")
                 
-                config.set('LinuxPaths', 'storage_path', os.path.abspath(os.path.join(
-                    actual_home,
-                    ".config/cursor/User/globalStorage/storage.json"
-                )))
-                config.set('LinuxPaths', 'sqlite_path', os.path.abspath(os.path.join(
-                    actual_home,
-                    ".config/cursor/User/globalStorage/state.vscdb"
-                )))
-                
-            self.db_path = config.get('LinuxPaths', 'storage_path')
-            self.sqlite_path = config.get('LinuxPaths', 'sqlite_path')
+            self.db_path = self.config.get('LinuxPaths', 'storage_path')
+            self.sqlite_path = self.config.get('LinuxPaths', 'sqlite_path')
             
         else:
             raise NotImplementedError(f"Not Supported OS: {sys.platform}")
-
-        # Save any changes to config file
-        with open(config_file, 'w', encoding='utf-8') as f:
-            config.write(f)
 
     def generate_new_ids(self):
         """Generate new machine ID"""
@@ -835,14 +799,14 @@ class MachineIDResetter:
             return False
 
 def run(translator=None):
-    config = get_config(translator)
+    config, config_dir = get_config(translator)
     if not config:
         return False
     print(f"\n{Fore.CYAN}{'='*50}{Style.RESET_ALL}")
     print(f"{Fore.CYAN}{EMOJI['RESET']} {translator.get('reset.title')}{Style.RESET_ALL}")
     print(f"{Fore.CYAN}{'='*50}{Style.RESET_ALL}")
 
-    resetter = MachineIDResetter(translator)  # Correctly pass translator
+    resetter = MachineIDResetter(config, config_dir, translator)
     resetter.reset_machine_ids()
 
     print(f"\n{Fore.CYAN}{'='*50}{Style.RESET_ALL}")

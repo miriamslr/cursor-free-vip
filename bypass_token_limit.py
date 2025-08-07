@@ -23,39 +23,11 @@ EMOJI = {
     "WARNING": "⚠️",
 }
 
-def get_user_documents_path():
-     """Get user Documents folder path"""
-     if sys.platform == "win32":
-         try:
-             import winreg
-             with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders") as key:
-                 documents_path, _ = winreg.QueryValueEx(key, "Personal")
-                 return documents_path
-         except Exception as e:
-             # fallback
-             return os.path.join(os.path.expanduser("~"), "Documents")
-     elif sys.platform == "darwin":
-         return os.path.join(os.path.expanduser("~"), "Documents")
-     else:  # Linux
-         # Get actual user's home directory
-         sudo_user = os.environ.get('SUDO_USER')
-         if sudo_user:
-             return os.path.join("/home", sudo_user, "Documents")
-         return os.path.join(os.path.expanduser("~"), "Documents")
-     
 
-def get_workbench_cursor_path(translator=None) -> str:
+def get_workbench_cursor_path(config, translator=None) -> str:
     """Get Cursor workbench.desktop.main.js path"""
     system = platform.system()
 
-    # Read configuration
-    config_dir = os.path.join(get_user_documents_path(), ".cursor-free-vip")
-    config_file = os.path.join(config_dir, "config.ini")
-    config = configparser.ConfigParser()
-
-    if os.path.exists(config_file):
-        config.read(config_file)
-    
     paths_map = {
         "Darwin": {  # macOS
             "base": "/Applications/Cursor.app/Contents/Resources/app",
@@ -69,11 +41,11 @@ def get_workbench_cursor_path(translator=None) -> str:
             "main": "out/vs/workbench/workbench.desktop.main.js"
         }
     }
-    
+
     if system == "Linux":
         # Add extracted AppImage with correct usr structure
         extracted_usr_paths = glob.glob(os.path.expanduser("~/squashfs-root/usr/share/cursor/resources/app"))
-            
+
         paths_map["Linux"]["bases"].extend(extracted_usr_paths)
 
     if system not in paths_map:
@@ -100,10 +72,10 @@ def get_workbench_cursor_path(translator=None) -> str:
             base_path = config.get('LinuxPaths', 'cursor_path')
 
     main_path = os.path.join(base_path, paths_map[system]["main"])
-    
+
     if not os.path.exists(main_path):
         raise OSError(translator.get('reset.file_not_found', path=main_path) if translator else f"未找到 Cursor main.js 文件: {main_path}")
-        
+
     return main_path
 
 
@@ -127,22 +99,22 @@ def modify_workbench_js(file_path: str, translator=None) -> bool:
             patterns = {
                 # 通用按钮替换模式
                 r'B(k,D(Ln,{title:"Upgrade to Pro",size:"small",get codicon(){return A.rocket},get onClick(){return t.pay}}),null)': r'B(k,D(Ln,{title:"yeongpin GitHub",size:"small",get codicon(){return A.github},get onClick(){return function(){window.open("https://github.com/yeongpin/cursor-free-vip","_blank")}}}),null)',
-                
+
                 # Windows/Linux
                 r'M(x,I(as,{title:"Upgrade to Pro",size:"small",get codicon(){return $.rocket},get onClick(){return t.pay}}),null)': r'M(x,I(as,{title:"yeongpin GitHub",size:"small",get codicon(){return $.github},get onClick(){return function(){window.open("https://github.com/yeongpin/cursor-free-vip","_blank")}}}),null)',
-                
+
                 # Mac 通用按钮替换模式
                 r'$(k,E(Ks,{title:"Upgrade to Pro",size:"small",get codicon(){return F.rocket},get onClick(){return t.pay}}),null)': r'$(k,E(Ks,{title:"yeongpin GitHub",size:"small",get codicon(){return F.rocket},get onClick(){return function(){window.open("https://github.com/yeongpin/cursor-free-vip","_blank")}}}),null)',
                 # Badge 替换
                 r'<div>Pro Trial': r'<div>Pro',
 
                 r'py-1">Auto-select': r'py-1">Bypass-Version-Pin',
-                
+
                 #
-                r'async getEffectiveTokenLimit(e){const n=e.modelName;if(!n)return 2e5;':r'async getEffectiveTokenLimit(e){return 9000000;const n=e.modelName;if(!n)return 9e5;',
+                r'async getEffectiveTokenLimit(e){const n=e.modelName;if(!n)return 2e5;': r'async getEffectiveTokenLimit(e){return 9000000;const n=e.modelName;if(!n)return 9e5;',
                 # Pro
                 r'var DWr=ne("<div class=settings__item_description>You are currently signed in with <strong></strong>.");': r'var DWr=ne("<div class=settings__item_description>You are currently signed in with <strong></strong>. <h1>Pro</h1>");',
-                
+
                 # Toast 替换
                 r'notifications-toasts': r'notifications-toasts hidden'
             }
@@ -160,7 +132,7 @@ def modify_workbench_js(file_path: str, translator=None) -> bool:
         backup_path = f"{file_path}.backup.{timestamp}"
         shutil.copy2(file_path, backup_path)
         print(f"{Fore.GREEN}{EMOJI['SUCCESS']} {translator.get('reset.backup_created', path=backup_path)}{Style.RESET_ALL}")
-        
+
         # Move temporary file to original position
         if os.path.exists(file_path):
             os.remove(file_path)
@@ -182,16 +154,18 @@ def modify_workbench_js(file_path: str, translator=None) -> bool:
             except:
                 pass
         return False
-    
+
+
 def run(translator=None):
-    config = get_config(translator)
+    config, config_dir = get_config(translator)
     if not config:
         return False
     print(f"\n{Fore.CYAN}{'='*50}{Style.RESET_ALL}")
     print(f"{Fore.CYAN}{EMOJI['RESET']} {translator.get('bypass_token_limit.title')}{Style.RESET_ALL}")
     print(f"{Fore.CYAN}{'='*50}{Style.RESET_ALL}")
 
-    modify_workbench_js(get_workbench_cursor_path(translator), translator)
+    workbench_path = get_workbench_cursor_path(config, translator)
+    modify_workbench_js(workbench_path, translator)
 
     print(f"\n{Fore.CYAN}{'='*50}{Style.RESET_ALL}")
     input(f"{EMOJI['INFO']} {translator.get('bypass_token_limit.press_enter')}...")

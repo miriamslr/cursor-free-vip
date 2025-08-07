@@ -29,7 +29,7 @@ class AutoUpdateDisabler:
         self.system = platform.system()
         
         # Get path from configuration file
-        config = get_config(translator)
+        config, _ = get_config(translator)
         if config:
             if self.system == "Windows":
                 self.updater_path = config.get('WindowsPaths', 'updater_path', fallback=os.path.join(os.getenv("LOCALAPPDATA", ""), "cursor-updater"))

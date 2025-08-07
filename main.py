@@ -88,7 +88,7 @@ def run_as_admin():
 class Translator:
     def __init__(self):
         self.translations = {}
-        self.config = get_config()
+        self.config, self.config_dir = get_config()
         
         # Create language cache directory if it doesn't exist
         if self.config and self.config.has_section('Language'):
@@ -103,28 +103,15 @@ class Translator:
             self.fallback_language = self.config.get('Language', 'fallback_language')
         
         # Load saved language from config if available, otherwise detect system language
-        if self.config and self.config.has_section('Language') and self.config.has_option('Language', 'current_language'):
-            saved_language = self.config.get('Language', 'current_language')
-            if saved_language and saved_language.strip():
-                self.current_language = saved_language
-            else:
-                self.current_language = self.detect_system_language()
-                # Save detected language to config
-                if self.config.has_section('Language'):
-                    self.config.set('Language', 'current_language', self.current_language)
-                    try:
-                        config_dir = os.path.join(get_user_documents_path(), ".cursor-free-vip")
-                        os.makedirs(config_dir, exist_ok=True)  # Garante que o diretório existe
-                        config_file = os.path.join(config_dir, "config.ini")
-                        with open(config_file, 'w', encoding='utf-8') as f:
-                            self.config.write(f)
-                    except Exception as e:
-                        print(f"{Fore.YELLOW}{EMOJI['INFO']} Failed to save config file: {e}")
-                        # Usa o diretório atual como fallback
-                        config_dir = os.path.dirname(os.path.abspath(__file__))
-                        print(f"{Fore.YELLOW}{EMOJI['INFO']} Using current directory for config: {config_dir}")
+        saved_language = self.config.get('Language', 'current_language', fallback=None)
+        if saved_language and saved_language.strip():
+            self.current_language = saved_language
         else:
             self.current_language = self.detect_system_language()
+            # Save detected language to config
+            if self.config.has_section('Language'):
+                self.config.set('Language', 'current_language', self.current_language)
+                self.save_config()
         
         self.load_translations()
     
@@ -155,26 +142,37 @@ class Translator:
             threadid = user32.GetWindowThreadProcessId(hwnd, 0)
             layout_id = user32.GetKeyboardLayout(threadid) & 0xFFFF
             
-            # Map language ID to our language codes using match-case
-            match layout_id:
-                case 0x0409:
-                    return 'en'      # English
-                case 0x0404:
-                    return 'zh_tw'   # Traditional Chinese
-                case 0x0804:
-                    return 'zh_cn'   # Simplified Chinese
-                case 0x0422:
-                    return 'vi'      # Vietnamese
-                case 0x0419:
-                    return 'ru'      # Russian
-                case 0x0415:
-                    return 'tr'      # Turkish
-                case 0x0402:
-                    return 'bg'      # Bulgarian
-                case 0x0401:
-                    return 'ar'      # Arabic
-                case _:
-                    return 'en'       # Default to English
+            # Map language ID to our language codes using if/elif/else
+            if layout_id == 1033:
+                return 'en'  # English (United States)
+            elif layout_id == 1041:
+                return 'ja'  # Japanese
+            elif layout_id == 2052:
+                return 'zh-hans'  # Chinese (Simplified, PRC)
+            elif layout_id == 1028:
+                return 'zh-hant'  # Chinese (Traditional, Taiwan)
+            elif layout_id == 1042:
+                return 'ko'  # Korean
+            elif layout_id == 1049:
+                return 'ru'  # Russian
+            elif layout_id == 1031:
+                return 'de'  # German
+            elif layout_id == 1036:
+                return 'fr'  # French
+            elif layout_id == 1034:
+                return 'es'  # Spanish
+            elif layout_id == 1046:
+                return 'pt'  # Portuguese (Brazil)
+            elif layout_id == 1025:
+                return 'ar'  # Arabic
+            elif layout_id == 1054:
+                return 'th'  # Thai
+            elif layout_id == 1066:
+                return 'vi'  # Vietnamese
+            elif layout_id == 1057:
+                return 'id'  # Indonesian
+            else:
+                return 'en' # Default to Englishystem_locale.lower()
         except:
             return self._detect_unix_language()
     
@@ -189,60 +187,58 @@ class Translator:
             
             system_locale = system_locale.lower()
             
-            # Map locale to our language codes using match-case
-            match system_locale:
-                case s if s.startswith('zh_tw') or s.startswith('zh_hk'):
+            # Map locale to our language codes using if/elif/else
+            if system_locale.startswith('zh_tw') or system_locale.startswith('zh_hk'):
+                return 'zh_tw'
+            elif system_locale.startswith('zh_cn'):
+                return 'zh_cn'
+            elif system_locale.startswith('en'):
+                return 'en'
+            elif system_locale.startswith('vi'):
+                return 'vi'
+            elif system_locale.startswith('nl'):
+                return 'nl'
+            elif system_locale.startswith('de'):
+                return 'de'
+            elif system_locale.startswith('fr'):
+                return 'fr'
+            elif system_locale.startswith('pt'):
+                return 'pt'
+            elif system_locale.startswith('ru'):
+                return 'ru'
+            elif system_locale.startswith('tr'):
+                return 'tr'
+            elif system_locale.startswith('bg'):
+                return 'bg'
+            elif system_locale.startswith('ar'):
+                return 'ar'
+            else:
+                # Try to get language from LANG environment variable as fallback
+                env_lang = os.getenv('LANG', '').lower()
+                if 'tw' in env_lang or 'hk' in env_lang:
                     return 'zh_tw'
-                case s if s.startswith('zh_cn'):
+                elif 'cn' in env_lang:
                     return 'zh_cn'
-                case s if s.startswith('en'):
-                    return 'en'
-                case s if s.startswith('vi'):
+                elif 'vi' in env_lang:
                     return 'vi'
-                case s if s.startswith('nl'):
+                elif 'nl' in env_lang:
                     return 'nl'
-                case s if s.startswith('de'):
+                elif 'de' in env_lang:
                     return 'de'
-                case s if s.startswith('fr'):
+                elif 'fr' in env_lang:
                     return 'fr'
-                case s if s.startswith('pt'):
+                elif 'pt' in env_lang:
                     return 'pt'
-                case s if s.startswith('ru'):
+                elif 'ru' in env_lang:
                     return 'ru'
-                case s if s.startswith('tr'):
+                elif 'tr' in env_lang:
                     return 'tr'
-                case s if s.startswith('bg'):
+                elif 'bg' in env_lang:
                     return 'bg'
-                case s if s.startswith('ar'):
+                elif 'ar' in env_lang:
                     return 'ar'
-                case _:
-                    # Try to get language from LANG environment variable as fallback
-                    env_lang = os.getenv('LANG', '').lower()
-                    match env_lang:
-                        case s if 'tw' in s or 'hk' in s:
-                            return 'zh_tw'
-                        case s if 'cn' in s:
-                            return 'zh_cn'
-                        case s if 'vi' in s:
-                            return 'vi'
-                        case s if 'nl' in s:
-                            return 'nl'
-                        case s if 'de' in s:
-                            return 'de'
-                        case s if 'fr' in s:
-                            return 'fr'
-                        case s if 'pt' in s:
-                            return 'pt'
-                        case s if 'ru' in s:
-                            return 'ru'
-                        case s if 'tr' in s:
-                            return 'tr'
-                        case s if 'bg' in s:
-                            return 'bg'
-                        case s if 'ar' in s:
-                            return 'ar'
-                        case _:
-                            return 'en'
+                else:
+                    return 'en'
         except:
             return 'en'
     
@@ -332,6 +328,14 @@ class Translator:
             self.current_language = lang_code
             return True
         return False
+
+    def save_config(self):
+        """Save current config to config.ini"""
+        try:
+            with open(os.path.join(self.config_dir, "config.ini"), 'w', encoding='utf-8') as f:
+                self.config.write(f)
+        except Exception as e:
+            print(f"{Fore.YELLOW}{EMOJI['WARNING']} Could not save config: {e}{Style.RESET_ALL}")
 
     def get_available_languages(self):
         """Get list of available languages"""
@@ -480,7 +484,7 @@ def select_language():
             translator.set_language(selected_language)
             
             # Save selected language to config
-            config = get_config()
+            config, _ = get_config()
             if config and config.has_section('Language'):
                 config.set('Language', 'current_language', selected_language)
                 
@@ -706,7 +710,7 @@ def main():
     print_logo()
     
     # Initialize configuration
-    config = get_config(translator)
+    config, config_dir = get_config(translator)
     if not config:
         print(f"{Fore.RED}{EMOJI['ERROR']} {translator.get('menu.config_init_failed')}{Style.RESET_ALL}")
         return
@@ -721,84 +725,83 @@ def main():
             choice_num = 17
             choice = input(f"\n{EMOJI['ARROW']} {Fore.CYAN}{translator.get('menu.input_choice', choices=f'0-{choice_num}')}: {Style.RESET_ALL}")
 
-            match choice:
-                case "0":
-                    print(f"\n{Fore.YELLOW}{EMOJI['INFO']} {translator.get('menu.exit')}...{Style.RESET_ALL}")
-                    print(f"{Fore.CYAN}{'═' * 50}{Style.RESET_ALL}")
-                    return
-                case "1":
-                    import reset_machine_manual
-                    reset_machine_manual.run(translator)
-                    print_menu()   
-                case "2":
-                    import cursor_register_manual
-                    cursor_register_manual.main(translator)
-                    print_menu()    
-                case "3":
-                    import quit_cursor
-                    quit_cursor.quit_cursor(translator)
+            if choice == "0":
+                print(f"\n{Fore.YELLOW}{EMOJI['INFO']} {translator.get('menu.exit')}...{Style.RESET_ALL}")
+                print(f"{Fore.CYAN}{'═' * 50}{Style.RESET_ALL}")
+                return
+            elif choice == "1":
+                import reset_machine_manual
+                reset_machine_manual.run(translator)
+                print_menu()   
+            elif choice == "2":
+                import cursor_register_manual
+                cursor_register_manual.main(translator)
+                print_menu()    
+            elif choice == "3":
+                import quit_cursor
+                quit_cursor.quit_cursor(translator)
+                print_menu()
+            elif choice == "4":
+                if select_language():
                     print_menu()
-                case "4":
-                    if select_language():
-                        print_menu()
-                    continue
-                case "5":
-                    from oauth_auth import main as oauth_main
-                    oauth_main('google',translator)
-                    print_menu()
-                case "6":
-                    from oauth_auth import main as oauth_main
-                    oauth_main('github',translator)
-                    print_menu()
-                case "7":
-                    import disable_auto_update
-                    disable_auto_update.run(translator)
-                    print_menu()
-                case "8":
-                    import totally_reset_cursor
-                    totally_reset_cursor.run(translator)
-                    # print(f"{Fore.YELLOW}{EMOJI['INFO']} {translator.get('menu.fixed_soon')}{Style.RESET_ALL}")
-                    print_menu()
-                case "9":
-                    import logo
-                    print(logo.CURSOR_CONTRIBUTORS)
-                    print_menu()
-                case "10":
-                    from config import print_config
-                    print_config(get_config(), translator)
-                    print_menu()
-                case "11":
-                    import bypass_version
-                    bypass_version.main(translator)
-                    print_menu()
-                case "12":
-                    import check_user_authorized
-                    check_user_authorized.main(translator)
-                    print_menu()
-                case "13":
-                    import bypass_token_limit
-                    bypass_token_limit.run(translator)
-                    print_menu()
-                case "14":
-                    import restore_machine_id
-                    restore_machine_id.run(translator)
-                    print_menu()
-                case "15":
-                    import delete_cursor_google
-                    delete_cursor_google.main(translator)
-                    print_menu()
-                case "16":
-                    from oauth_auth import OAuthHandler
-                    oauth = OAuthHandler(translator)
-                    oauth._select_profile()
-                    print_menu()
-                case "17":
-                    import manual_custom_auth
-                    manual_custom_auth.main(translator)
-                    print_menu()
-                case _:
-                    print(f"{Fore.RED}{EMOJI['ERROR']} {translator.get('menu.invalid_choice')}{Style.RESET_ALL}")
-                    print_menu()
+                continue
+            elif choice == "5":
+                from oauth_auth import main as oauth_main
+                oauth_main('google',translator)
+                print_menu()
+            elif choice == "6":
+                from oauth_auth import main as oauth_main
+                oauth_main('github',translator)
+                print_menu()
+            elif choice == "7":
+                import disable_auto_update
+                disable_auto_update.run(translator)
+                print_menu()
+            elif choice == "8":
+                import totally_reset_cursor
+                totally_reset_cursor.run(translator)
+                print_menu()
+            elif choice == "9":
+                import logo
+                print(logo.CURSOR_CONTRIBUTORS)
+                print_menu()
+            elif choice == "10":
+                from config import print_config
+                config, _ = get_config(translator)
+                print_config(config, translator)
+                print_menu()
+            elif choice == "11":
+                import bypass_version
+                bypass_version.main(translator)
+                print_menu()
+            elif choice == "12":
+                import check_user_authorized
+                check_user_authorized.main(translator)
+                print_menu()
+            elif choice == "13":
+                import bypass_token_limit
+                bypass_token_limit.run(translator)
+                print_menu()
+            elif choice == "14":
+                import restore_machine_id
+                restore_machine_id.run(translator)
+                print_menu()
+            elif choice == "15":
+                import delete_cursor_google
+                delete_cursor_google.main(translator)
+                print_menu()
+            elif choice == "16":
+                from oauth_auth import OAuthHandler
+                oauth = OAuthHandler(translator)
+                oauth._select_profile()
+                print_menu()
+            elif choice == "17":
+                import manual_custom_auth
+                manual_custom_auth.main(translator)
+                print_menu()
+            else:
+                print(f"{Fore.RED}{EMOJI['ERROR']} {translator.get('menu.invalid_choice')}{Style.RESET_ALL}")
+                print_menu()
 
         except KeyboardInterrupt:
             print(f"\n{Fore.YELLOW}{EMOJI['INFO']}  {translator.get('menu.program_terminated')}{Style.RESET_ALL}")

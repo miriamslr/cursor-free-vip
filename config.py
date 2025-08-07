@@ -25,7 +25,8 @@ def setup_config(translator=None):
     """Setup configuration file and return config object"""
     try:
         # get documents path
-        docs_path = get_user_documents_path()
+        # Force using current working directory to avoid issues with incorrect Documents path
+        docs_path = os.getcwd()
         if not docs_path or not os.path.exists(docs_path):
             # if documents path not found, use current directory
             print(f"{Fore.YELLOW}{EMOJI['WARNING']} {translator.get('config.documents_path_not_found', fallback='Documents path not found, using current directory') if translator else 'Documents path not found, using current directory'}{Style.RESET_ALL}")
@@ -287,8 +288,9 @@ def setup_config(translator=None):
                 config.write(f)
             if translator:
                 print(f"{Fore.GREEN}{EMOJI['SUCCESS']} {translator.get('config.config_created', config_file=config_file) if translator else f'Config created: {config_file}'}{Style.RESET_ALL}")
-
-        return config
+        
+        # return config object and config_dir
+        return config, config_dir
 
     except Exception as e:
         if translator:
@@ -373,8 +375,9 @@ def force_update_config(translator=None):
         return None
 
 def get_config(translator=None):
-    """Get existing config or create new one"""
+    """Get existing config or create new one, returns config and config_dir"""
     global _config_cache
-    if _config_cache is None:
-        _config_cache = setup_config(translator)
+    if _config_cache is None or not isinstance(_config_cache, tuple):
+        config, config_dir = setup_config(translator)
+        _config_cache = (config, config_dir)
     return _config_cache

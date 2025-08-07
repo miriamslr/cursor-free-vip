@@ -35,6 +35,7 @@ EMOJI = {
 class CursorRegistration:
     def __init__(self, translator=None):
         self.translator = translator
+        self.config, self.config_dir = get_config(translator)
         # Set to display mode
         os.environ['BROWSER_HEADLESS'] = 'False'
         self.browser = None
@@ -69,7 +70,7 @@ class CursorRegistration:
         """Setup Email"""
         try:
             # Try to get a suggested email
-            account_manager = AccountManager(self.translator)
+            account_manager = AccountManager(self.translator, config_dir=self.config_dir)
             suggested_email = account_manager.suggest_email(self.first_name, self.last_name)
             
             if suggested_email:
@@ -123,12 +124,10 @@ class CursorRegistration:
             print(f"{Fore.CYAN}{EMOJI['START']} {self.translator.get('register.register_start')}...{Style.RESET_ALL}")
             
             # Check if tempmail_plus is enabled
-            config = get_config(self.translator)
-            email_tab = None
-            if config and config.has_section('TempMailPlus'):
-                if config.getboolean('TempMailPlus', 'enabled'):
-                    email = config.get('TempMailPlus', 'email')
-                    epin = config.get('TempMailPlus', 'epin')
+            if self.config and self.config.has_section('TempMailPlus'):
+                if self.config.getboolean('TempMailPlus', 'enabled'):
+                    email = self.config.get('TempMailPlus', 'email')
+                    epin = self.config.get('TempMailPlus', 'epin')
                     if email and epin:
                         from email_tabs.tempmail_plus_tab import TempMailPlusTab
                         email_tab = TempMailPlusTab(email, epin, self.translator)
@@ -239,12 +238,12 @@ class CursorRegistration:
 
             # Reset machine ID
             print(f"{Fore.CYAN}{EMOJI['UPDATE']} {self.translator.get('register.reset_machine_id')}...{Style.RESET_ALL}")
-            resetter = MachineIDResetter(self.translator)  # Create instance with translator
+            resetter = MachineIDResetter(self.config, self.config_dir, self.translator)
             if not resetter.reset_machine_ids():  # Call reset_machine_ids method directly
                 raise Exception("Failed to reset machine ID")
             
             # Save account information to file using AccountManager
-            account_manager = AccountManager(self.translator)
+            account_manager = AccountManager(self.translator, config_dir=self.config_dir)
             if account_manager.save_account_info(self.email_address, self.password, token, total_usage):
                 return True
             else:
