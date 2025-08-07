@@ -73,8 +73,6 @@ class CursorRegistration:
             suggested_email = account_manager.suggest_email(self.first_name, self.last_name)
             
             if suggested_email:
-                print(f"{Fore.CYAN}{EMOJI['START']} {self.translator.get('register.suggest_email', suggested_email=suggested_email) if self.translator else f'Suggested email: {suggested_email}'}")
-                print(f"{Fore.CYAN}{EMOJI['START']} {self.translator.get('register.use_suggested_email_or_enter') if self.translator else 'Type "yes" to use this email or enter your own email:'}")
                 print(f"{Fore.CYAN}{EMOJI['START']} {self.translator.get('register.suggest_email', suggested_email=suggested_email) if self.translator else f'Suggested email: {suggested_email}'}{Style.RESET_ALL}")
                 message = self.translator.get('register.use_suggested_email_or_enter') if self.translator else 'Type "yes" to use this email or enter your own email:'
                 print(f"{Fore.CYAN}{EMOJI['START']} {message}{Style.RESET_ALL}")

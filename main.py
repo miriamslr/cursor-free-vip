@@ -112,10 +112,6 @@ class Translator:
                 # Save detected language to config
                 if self.config.has_section('Language'):
                     self.config.set('Language', 'current_language', self.current_language)
-                    config_dir = os.path.join(get_user_documents_path(), ".cursor-free-vip")
-                    config_file = os.path.join(config_dir, "config.ini")
-                    with open(config_file, 'w', encoding='utf-8') as f:
-                        self.config.write(f)
                     try:
                         config_dir = os.path.join(get_user_documents_path(), ".cursor-free-vip")
                         os.makedirs(config_dir, exist_ok=True)  # Garante que o diretório existe
