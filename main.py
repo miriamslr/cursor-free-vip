@@ -116,6 +116,17 @@ class Translator:
                     config_file = os.path.join(config_dir, "config.ini")
                     with open(config_file, 'w', encoding='utf-8') as f:
                         self.config.write(f)
+                    try:
+                        config_dir = os.path.join(get_user_documents_path(), ".cursor-free-vip")
+                        os.makedirs(config_dir, exist_ok=True)  # Garante que o diretório existe
+                        config_file = os.path.join(config_dir, "config.ini")
+                        with open(config_file, 'w', encoding='utf-8') as f:
+                            self.config.write(f)
+                    except Exception as e:
+                        print(f"{Fore.YELLOW}{EMOJI['INFO']} Failed to save config file: {e}")
+                        # Usa o diretório atual como fallback
+                        config_dir = os.path.dirname(os.path.abspath(__file__))
+                        print(f"{Fore.YELLOW}{EMOJI['INFO']} Using current directory for config: {config_dir}")
         else:
             self.current_language = self.detect_system_language()
         
