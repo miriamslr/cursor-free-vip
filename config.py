@@ -123,10 +123,10 @@ def setup_config(translator=None):
                 'storage_path': os.path.join(appdata, "Cursor", "User", "globalStorage", "storage.json"),
                 'sqlite_path': os.path.join(appdata, "Cursor", "User", "globalStorage", "state.vscdb"),
                 'machine_id_path': os.path.join(appdata, "Cursor", "machineId"),
-                'cursor_path': os.path.join(localappdata, "Programs", "Cursor", "resources", "app"),
+                'cursor_path': "C:\\Program Files\\cursor\\resources\\app",
                 'updater_path': os.path.join(localappdata, "cursor-updater"),
-                'update_yml_path': os.path.join(localappdata, "Programs", "Cursor", "resources", "app-update.yml"),
-                'product_json_path': os.path.join(localappdata, "Programs", "Cursor", "resources", "app", "product.json")
+                'update_yml_path': "C:\\Program Files\\cursor\\resources\\app-update.yml",
+                'product_json_path': "C:\\Program Files\\cursor\\resources\\app\\product.json"
             }
             # Create storage directory
             os.makedirs(os.path.dirname(default_config['WindowsPaths']['storage_path']), exist_ok=True)

@@ -67,7 +67,7 @@ def get_cursor_paths(translator=None) -> Tuple[str, str]:
     # Default paths for different systems
     default_paths = {
         "Darwin": "/Applications/Cursor.app/Contents/Resources/app",
-        "Windows": os.path.join(os.getenv("LOCALAPPDATA", ""), "Programs", "Cursor", "resources", "app"),
+        "Windows": "C:\\Program Files\\cursor\\resources\\app",
         "Linux": ["/opt/Cursor/resources/app", "/usr/share/cursor/resources/app", os.path.expanduser("~/.local/share/cursor/resources/app"), "/usr/lib/cursor/app/"]
     }
     

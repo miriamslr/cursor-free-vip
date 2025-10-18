@@ -23,7 +23,6 @@ EMOJI = {
     "WARNING": "⚠️",
 }
 
-
 def get_workbench_cursor_path(config, translator=None) -> str:
     """Get Cursor workbench.desktop.main.js path"""
     system = platform.system()
@@ -34,6 +33,8 @@ def get_workbench_cursor_path(config, translator=None) -> str:
             "main": "out/vs/workbench/workbench.desktop.main.js"
         },
         "Windows": {
+            # Caminho padrão CORRETO para ser usado se config.ini não existir
+            "base": "C:\\Program Files\\cursor\\resources\\app", 
             "main": "out\\vs\\workbench\\workbench.desktop.main.js"
         },
         "Linux": {
@@ -43,38 +44,34 @@ def get_workbench_cursor_path(config, translator=None) -> str:
     }
 
     if system == "Linux":
-        # Add extracted AppImage with correct usr structure
         extracted_usr_paths = glob.glob(os.path.expanduser("~/squashfs-root/usr/share/cursor/resources/app"))
-
         paths_map["Linux"]["bases"].extend(extracted_usr_paths)
 
     if system not in paths_map:
-        raise OSError(translator.get('reset.unsupported_os', system=system) if translator else f"不支持的操作系统: {system}")
+        raise OSError(translator.get('reset.unsupported_os', system=system) if translator else f"Unsupported OS: {system}")
 
-    if system == "Linux":
-        for base in paths_map["Linux"]["bases"]:
-            main_path = os.path.join(base, paths_map["Linux"]["main"])
-            print(f"{Fore.CYAN}{EMOJI['INFO']} Checking path: {main_path}{Style.RESET_ALL}")
-            if os.path.exists(main_path):
-                return main_path
-
+    base_path = ""
+    # A lógica agora prioriza o config, mas o fallback é o caminho correto.
     if system == "Windows":
-        base_path = config.get('WindowsPaths', 'cursor_path')
+        base_path = config.get('WindowsPaths', 'cursor_path', fallback=paths_map["Windows"]["base"])
     elif system == "Darwin":
-        base_path = paths_map[system]["base"]
-        if config.has_section('MacPaths') and config.has_option('MacPaths', 'cursor_path'):
-            base_path = config.get('MacPaths', 'cursor_path')
-    else:  # Linux
-        # For Linux, we've already checked all bases in the loop above
-        # If we're here, it means none of the bases worked, so we'll use the first one
-        base_path = paths_map[system]["bases"][0]
-        if config.has_section('LinuxPaths') and config.has_option('LinuxPaths', 'cursor_path'):
+        base_path = config.get('MacPaths', 'cursor_path', fallback=paths_map["Darwin"]["base"])
+    elif system == "Linux":
+        if config.has_option('LinuxPaths', 'cursor_path'):
             base_path = config.get('LinuxPaths', 'cursor_path')
+        else:
+            for base in paths_map["Linux"]["bases"]:
+                if os.path.exists(base):
+                    base_path = base
+                    break
+    
+    if not base_path or not os.path.exists(base_path):
+         raise OSError(translator.get('reset.path_not_found', path=base_path) if translator else f"Cursor path not found: {base_path}")
 
     main_path = os.path.join(base_path, paths_map[system]["main"])
 
     if not os.path.exists(main_path):
-        raise OSError(translator.get('reset.file_not_found', path=main_path) if translator else f"未找到 Cursor main.js 文件: {main_path}")
+        raise OSError(translator.get('reset.file_not_found', path=main_path) if translator else f"Cursor main.js file not found: {main_path}")
 
     return main_path
 
@@ -84,92 +81,100 @@ def modify_workbench_js(file_path: str, translator=None) -> bool:
     Modify file content
     """
     try:
-        # Save original file permissions
+        print(f"{Fore.CYAN}{EMOJI['INFO']} Iniciando modificação do arquivo: {file_path}{Style.RESET_ALL}")
+        
         original_stat = os.stat(file_path)
         original_mode = original_stat.st_mode
         original_uid = original_stat.st_uid
         original_gid = original_stat.st_gid
+        print(f"{Fore.CYAN}{EMOJI['INFO']} Permissões originais - Modo: {oct(original_mode)}, UID: {original_uid}, GID: {original_gid}{Style.RESET_ALL}")
 
-        # Create temporary file
-        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", errors="ignore", delete=False) as tmp_file:
-            # Read original content
-            with open(file_path, "r", encoding="utf-8", errors="ignore") as main_file:
-                content = main_file.read()
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as main_file:
+            content = main_file.read()
 
-            patterns = {
-                # 通用按钮替换模式
-                r'B(k,D(Ln,{title:"Upgrade to Pro",size:"small",get codicon(){return A.rocket},get onClick(){return t.pay}}),null)': r'B(k,D(Ln,{title:"yeongpin GitHub",size:"small",get codicon(){return A.github},get onClick(){return function(){window.open("https://github.com/yeongpin/cursor-free-vip","_blank")}}}),null)',
+        print(f"{Fore.CYAN}{EMOJI['INFO']} Aplicando padrões de substituição...{Style.RESET_ALL}")
+        
+        patterns = {
+            # MODIFICAÇÃO PRINCIPAL: Usa a assinatura exata que encontramos.
+            'async getEffectiveTokenLimit(e){const n=e.modelName;if(!n)return 2e5;const r=this.lb.get(n);if(r){const[a,l]=r;if(l>new Date)return a}const o=await this.aiClient();try{const l=(await o.getEffectiveTokenLimit(new hOt({modelDetails:e}))).tokenLimit;return this.lb.set(n,[l,new Date(Date.now()+864e5)]),l}catch(a){return console.error(a),2e5}}':
+            'async getEffectiveTokenLimit(e){return 9000000}',
 
-                # Windows/Linux
-                r'M(x,I(as,{title:"Upgrade to Pro",size:"small",get codicon(){return $.rocket},get onClick(){return t.pay}}),null)': r'M(x,I(as,{title:"yeongpin GitHub",size:"small",get codicon(){return $.github},get onClick(){return function(){window.open("https://github.com/yeongpin/cursor-free-vip","_blank")}}}),null)',
+            'async getEffectiveTokenLimit(e){return 9000000}':
+            'async getEffectiveTokenLimit(e){return 9000000;const n=e.modelName;if(!n)return 9e5;}',
+            
+            't.isTrial||t.isEnterpriseTrial?"Pro Trial":"Pro"':
+            '"Pro"',
+            
+            'title:"Upgrade",size:"small",get codicon(){return o.rocket},get onClick(){return e.pay}':
+            'title:"Patched by VIP",size:"small",get codicon(){return o.github},get onClick(){return()=>this.openUrl("https://github.com/yeongpin/cursor-free-vip")}',
 
-                # Mac 通用按钮替换模式
-                r'$(k,E(Ks,{title:"Upgrade to Pro",size:"small",get codicon(){return F.rocket},get onClick(){return t.pay}}),null)': r'$(k,E(Ks,{title:"yeongpin GitHub",size:"small",get codicon(){return F.rocket},get onClick(){return function(){window.open("https://github.com/yeongpin/cursor-free-vip","_blank")}}}),null)',
-                # Badge 替换
-                r'<div>Pro Trial': r'<div>Pro',
+            'notifications-toasts':
+            'notifications-toasts hidden'
+        }
 
-                r'py-1">Auto-select': r'py-1">Bypass-Version-Pin',
+        found_any = False
+        content_modified = content
+        for old, new in patterns.items():
+            if old in content_modified:
+                print(f"{Fore.GREEN}{EMOJI['SUCCESS']} Padrão encontrado e será substituído ({content_modified.count(old)} ocorrências):")
+                print(f"  Antigo: {old[:70]}...")
+                print(f"  Novo: {new[:70]}...")
+                content_modified = content_modified.replace(old, new)
+                found_any = True
+            else:
+                print(f"{Fore.YELLOW}{EMOJI['WARNING']} Padrão não encontrado no arquivo:")
+                print(f"  {old[:70]}...")
 
-                #
-                r'async getEffectiveTokenLimit(e){const n=e.modelName;if(!n)return 2e5;': r'async getEffectiveTokenLimit(e){return 9000000;const n=e.modelName;if(!n)return 9e5;',
-                # Pro
-                r'var DWr=ne("<div class=settings__item_description>You are currently signed in with <strong></strong>.");': r'var DWr=ne("<div class=settings__item_description>You are currently signed in with <strong></strong>. <h1>Pro</h1>");',
+        if not found_any:
+            print(f"{Fore.RED}{EMOJI['ERROR']} Nenhum dos padrões foi encontrado. A modificação falhou. Sua versão do Cursor pode ser incompatível.{Style.RESET_ALL}")
+            return False
 
-                # Toast 替换
-                r'notifications-toasts': r'notifications-toasts hidden'
-            }
-
-            # 使用patterns进行替换
-            for old_pattern, new_pattern in patterns.items():
-                content = content.replace(old_pattern, new_pattern)
-
-            # Write to temporary file
-            tmp_file.write(content)
-            tmp_path = tmp_file.name
-
-        # Backup original file with timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         backup_path = f"{file_path}.backup.{timestamp}"
         shutil.copy2(file_path, backup_path)
-        print(f"{Fore.GREEN}{EMOJI['SUCCESS']} {translator.get('reset.backup_created', path=backup_path)}{Style.RESET_ALL}")
+        print(f"{Fore.GREEN}{EMOJI['SUCCESS']} Backup criado em: {backup_path}{Style.RESET_ALL}")
 
-        # Move temporary file to original position
-        if os.path.exists(file_path):
-            os.remove(file_path)
-        shutil.move(tmp_path, file_path)
+        print(f"{Fore.CYAN}{EMOJI['INFO']} Substituindo arquivo original pelo modificado...{Style.RESET_ALL}")
+        with open(file_path, "w", encoding="utf-8", errors="ignore") as main_file:
+            main_file.write(content_modified)
 
-        # Restore original permissions
+        print(f"{Fore.GREEN}{EMOJI['SUCCESS']} Arquivo modificado com sucesso{Style.RESET_ALL}")
+        
+        print(f"{Fore.CYAN}{EMOJI['INFO']} Restaurando permissões originais...{Style.RESET_ALL}")
         os.chmod(file_path, original_mode)
-        if os.name != "nt":  # Not Windows
+        if platform.system() != "Windows":
             os.chown(file_path, original_uid, original_gid)
 
-        print(f"{Fore.GREEN}{EMOJI['SUCCESS']} {translator.get('reset.file_modified')}{Style.RESET_ALL}")
         return True
 
     except Exception as e:
-        print(f"{Fore.RED}{EMOJI['ERROR']} {translator.get('reset.modify_file_failed', error=str(e))}{Style.RESET_ALL}")
-        if "tmp_path" in locals():
-            try:
-                os.unlink(tmp_path)
-            except:
-                pass
+        print(f"{Fore.RED}{EMOJI['ERROR']} Falha ao modificar o arquivo: {str(e)}{Style.RESET_ALL}")
         return False
-
 
 def run(translator=None):
-    config, config_dir = get_config(translator)
-    if not config:
-        return False
-    print(f"\n{Fore.CYAN}{'='*50}{Style.RESET_ALL}")
-    print(f"{Fore.CYAN}{EMOJI['RESET']} {translator.get('bypass_token_limit.title')}{Style.RESET_ALL}")
-    print(f"{Fore.CYAN}{'='*50}{Style.RESET_ALL}")
+    try:
+        config, config_dir = get_config(translator)
+        if not config:
+            return False
+            
+        print(f"\n{Fore.CYAN}{'='*50}{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}{EMOJI['RESET']} Ferramenta para Burlar o Limite de Tokens{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}{'='*50}{Style.RESET_ALL}")
 
-    workbench_path = get_workbench_cursor_path(config, translator)
-    modify_workbench_js(workbench_path, translator)
+        workbench_path = get_workbench_cursor_path(config, translator)
+        modify_workbench_js(workbench_path, translator)
+
+    except Exception as e:
+        print(f"{Fore.RED}{EMOJI['ERROR']} Um erro inesperado ocorreu: {e}{Style.RESET_ALL}")
 
     print(f"\n{Fore.CYAN}{'='*50}{Style.RESET_ALL}")
-    input(f"{EMOJI['INFO']} {translator.get('bypass_token_limit.press_enter')}...")
+    input(f"{EMOJI['INFO']} Pressione Enter para sair...")
 
 if __name__ == "__main__":
-    from main import translator as main_translator
-    run(main_translator)
+    class SimpleTranslator:
+        def get(self, key, **kwargs):
+            parts = key.split('.')
+            text = parts[-1].replace('_', ' ').title()
+            return text
+
+    run(translator=SimpleTranslator())
